@@ -1,0 +1,818 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>BFS 廣度優先搜尋互動視覺化</title>
+    <!-- 引入 Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- 引入 Google Fonts (Inter & Fira Code) -->
+    <link href="https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;500;600&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f8fafc;
+        }
+        .code-font {
+            font-family: 'Fira Code', monospace;
+        }
+        /* 自訂平滑過渡動畫 */
+        .node-transition {
+            transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+        .edge-transition {
+            transition: stroke 0.4s ease, stroke-width 0.4s ease;
+        }
+        /* 程式碼行高亮過渡 */
+        .code-line {
+            transition: background-color 0.2s ease, border-color 0.2s ease;
+        }
+        /* 隱藏滾動條但保留功能 */
+        .no-scrollbar::-webkit-scrollbar {
+            display: none;
+        }
+        .no-scrollbar {
+            -ms-overflow-style: none;
+            scrollbar-width: none;
+        }
+    </style>
+</head>
+<body class="text-slate-800 antialiased min-h-screen flex flex-col">
+
+    <!-- 頂部導覽列 -->
+    <header class="bg-white border-b border-slate-200 sticky top-0 z-10 shadow-sm">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 flex flex-col sm:flex-row items-center justify-between gap-4">
+            <div class="flex items-center gap-3">
+                <div class="bg-indigo-600 text-white p-2 rounded-xl shadow-sm">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
+                    </svg>
+                </div>
+                <div>
+                    <h1 class="text-xl font-bold text-slate-900">BFS 廣度優先搜尋互動視覺化</h1>
+                    <p class="text-xs text-slate-500">結合標準五步驟與 Python 程式碼的單步追蹤器</p>
+                </div>
+            </div>
+
+            <!-- 圖形預設與起點選擇 -->
+            <div class="flex flex-wrap items-center gap-3">
+                <div class="flex items-center gap-2 bg-slate-100 px-3 py-1.5 rounded-xl border border-slate-200">
+                    <label for="graphSelect" class="text-xs font-semibold text-slate-600">圖形結構：</label>
+                    <select id="graphSelect" class="bg-transparent text-sm font-medium text-slate-800 focus:outline-none cursor-pointer">
+                        <option value="tree">樹狀分層圖 (A-G)</option>
+                        <option value="mesh">網狀無向圖 (A-F)</option>
+                        <option value="cycle">帶環複雜圖 (0-6)</option>
+                    </select>
+                </div>
+                <div class="flex items-center gap-2 bg-slate-100 px-3 py-1.5 rounded-xl border border-slate-200">
+                    <label for="startNodeSelect" class="text-xs font-semibold text-slate-600">起點 (start)：</label>
+                    <select id="startNodeSelect" class="bg-transparent text-sm font-bold text-indigo-600 focus:outline-none cursor-pointer">
+                        <!-- 動態生成選項 -->
+                    </select>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <!-- 主要內容區塊 -->
+    <main class="flex-grow max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6 grid grid-cols-1 lg:grid-cols-12 gap-6">
+        
+        <!-- 左側欄：圖形畫布與資料結構狀態 (佔 7 欄) -->
+        <div class="lg:col-span-7 flex flex-col gap-6">
+            
+            <!-- 圖形視覺化卡片 -->
+            <div class="bg-white rounded-2xl shadow-sm border border-slate-200 p-4 sm:p-6 flex flex-col">
+                <div class="flex flex-wrap items-center justify-between gap-2 mb-4">
+                    <h2 class="text-base font-bold text-slate-800 flex items-center gap-2">
+                        <span class="w-2.5 h-2.5 rounded-full bg-indigo-500"></span>
+                        圖形走訪狀態 (Graph)
+                    </h2>
+                    <!-- 圖例說明 -->
+                    <div class="flex flex-wrap items-center gap-3 text-xs font-medium text-slate-600">
+                        <span class="flex items-center gap-1.5"><span class="w-3 h-3 rounded-full bg-slate-100 border-2 border-slate-300"></span>未拜訪</span>
+                        <span class="flex items-center gap-1.5"><span class="w-3 h-3 rounded-full bg-amber-100 border-2 border-amber-500"></span>在 Queue 中</span>
+                        <span class="flex items-center gap-1.5"><span class="w-3 h-3 rounded-full bg-indigo-600"></span>當前節點 (now)</span>
+                        <span class="flex items-center gap-1.5"><span class="w-3 h-3 rounded-full bg-emerald-500"></span>已拜訪完成</span>
+                    </div>
+                </div>
+
+                <!-- SVG 圖形容器 -->
+                <div class="relative w-full bg-slate-50 rounded-xl border border-slate-200/80 overflow-hidden flex items-center justify-center" style="min-height: 300px;">
+                    <svg id="graphSvg" viewBox="0 0 600 320" class="w-full h-auto max-h-[340px] select-none">
+                        <g id="edgesGroup"></g>
+                        <g id="nodesGroup"></g>
+                    </svg>
+                </div>
+
+                <!-- 控制按鈕列 -->
+                <div class="mt-5 flex flex-wrap items-center justify-between gap-3 pt-4 border-t border-slate-100">
+                    <div class="flex items-center gap-2">
+                        <button id="btnReset" class="px-3.5 py-2.5 rounded-xl text-sm font-semibold text-slate-700 bg-slate-100 hover:bg-slate-200 active:scale-95 transition flex items-center gap-1.5 cursor-pointer">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" /></svg>
+                            重置
+                        </button>
+                        <button id="btnPrev" class="px-3.5 py-2.5 rounded-xl text-sm font-semibold text-slate-700 bg-white border border-slate-300 hover:bg-slate-50 disabled:opacity-40 disabled:pointer-events-none active:scale-95 transition flex items-center gap-1 cursor-pointer">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" /></svg>
+                            上一步
+                        </button>
+                        <button id="btnNext" class="px-4 py-2.5 rounded-xl text-sm font-semibold text-white bg-indigo-600 hover:bg-indigo-700 disabled:opacity-40 disabled:pointer-events-none shadow-sm active:scale-95 transition flex items-center gap-1 cursor-pointer">
+                            下一步
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" /></svg>
+                        </button>
+                    </div>
+
+                    <div class="flex items-center gap-3">
+                        <button id="btnAuto" class="px-4 py-2.5 rounded-xl text-sm font-semibold text-emerald-700 bg-emerald-50 border border-emerald-200 hover:bg-emerald-100 active:scale-95 transition flex items-center gap-1.5 cursor-pointer">
+                            <span id="autoIcon">▶</span>
+                            <span id="autoText">自動播放</span>
+                        </button>
+                        <span id="stepCounter" class="text-xs font-semibold text-slate-500 bg-slate-100 px-2.5 py-1.5 rounded-lg">
+                            步驟 0 / 0
+                        </span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 資料結構即時狀態卡片 (Queue 與 Visited) -->
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <!-- Queue 佇列狀態 -->
+                <div class="bg-white rounded-2xl shadow-sm border border-slate-200 p-4 flex flex-col justify-between">
+                    <div>
+                        <div class="flex items-center justify-between mb-2">
+                            <h3 class="text-sm font-bold text-slate-800 flex items-center gap-1.5">
+                                <span class="px-1.5 py-0.5 text-xs bg-amber-100 text-amber-800 rounded font-mono">q = deque()</span>
+                                佇列狀態
+                            </h3>
+                            <span class="text-[11px] text-slate-400 font-medium">FIFO 先進先出</span>
+                        </div>
+                        <div class="flex items-center justify-between text-[11px] text-slate-400 mb-1.5 px-1">
+                            <span>← popleft() 取出端</span>
+                            <span>append() 加入端 ←</span>
+                        </div>
+                        <div id="queueContainer" class="min-h-[54px] bg-slate-50 rounded-xl border border-slate-200 p-2 flex items-center gap-2 overflow-x-auto no-scrollbar">
+                            <span class="text-xs text-slate-400 italic mx-auto">佇列為空 (Empty)</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Visited 已拜訪集合狀態 -->
+                <div class="bg-white rounded-2xl shadow-sm border border-slate-200 p-4 flex flex-col justify-between">
+                    <div>
+                        <div class="flex items-center justify-between mb-2">
+                            <h3 class="text-sm font-bold text-slate-800 flex items-center gap-1.5">
+                                <span class="px-1.5 py-0.5 text-xs bg-emerald-100 text-emerald-800 rounded font-mono">visited</span>
+                                已拜訪集合
+                            </h3>
+                            <span class="text-[11px] text-slate-400 font-medium">避免重複走訪</span>
+                        </div>
+                        <div class="text-[11px] text-slate-400 mb-1.5 px-1">
+                            走訪順序紀錄：
+                        </div>
+                        <div id="visitedContainer" class="min-h-[54px] bg-slate-50 rounded-xl border border-slate-200 p-2 flex flex-wrap items-center gap-2">
+                            <span class="text-xs text-slate-400 italic mx-auto">尚未拜訪任何節點</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 右側欄：BFS 五步驟對應與 Python 程式碼 (佔 5 欄) -->
+        <div class="lg:col-span-5 flex flex-col gap-6">
+            
+            <!-- 當前執行說明 Banner -->
+            <div id="explanationBox" class="bg-indigo-50 border-l-4 border-indigo-600 rounded-r-2xl rounded-l-md p-4 shadow-sm transition-all">
+                <div class="flex items-center gap-2 mb-1">
+                    <span id="stepBadge" class="px-2 py-0.5 text-xs font-bold bg-indigo-600 text-white rounded-md">準備就緒</span>
+                    <h3 id="stepTitle" class="text-sm font-bold text-indigo-950">點擊「下一步」開始執行 BFS</h3>
+                </div>
+                <p id="stepDesc" class="text-sm text-indigo-900/80 leading-relaxed mt-1">
+                    觀察右側程式碼與左側圖形如何同步運作。您可以隨時切換不同的圖形結構或起始節點。
+                </p>
+            </div>
+
+            <!-- Python 程式碼追蹤器 -->
+            <div class="bg-slate-900 rounded-2xl shadow-md overflow-hidden border border-slate-800 flex flex-col">
+                <div class="bg-slate-800/80 px-4 py-2.5 flex items-center justify-between border-b border-slate-700/80">
+                    <div class="flex items-center gap-2">
+                        <span class="w-3 h-3 rounded-full bg-rose-500"></span>
+                        <span class="w-3 h-3 rounded-full bg-amber-500"></span>
+                        <span class="w-3 h-3 rounded-full bg-emerald-500"></span>
+                        <span class="text-xs font-medium text-slate-300 ml-2 code-font">bfs_traversal.py</span>
+                    </div>
+                    <span class="text-xs text-slate-400">Python 實作</span>
+                </div>
+                
+                <div class="p-4 overflow-x-auto text-sm code-font leading-relaxed text-slate-300" id="codeContainer">
+                    <div id="code-line-1" class="code-line px-2 py-0.5 rounded border-l-2 border-transparent"><span class="text-purple-400">from</span> collections <span class="text-purple-400">import</span> deque</div>
+                    <div id="code-line-2" class="code-line px-2 py-0.5 rounded border-l-2 border-transparent">q = deque()             <span class="text-slate-500 text-xs"># 步驟 1: 建立 Queue</span></div>
+                    <div id="code-line-3" class="code-line px-2 py-0.5 rounded border-l-2 border-transparent">visited = set()</div>
+                    <div id="code-line-4" class="code-line px-2 py-0.5 rounded border-l-2 border-transparent">q.append(start)         <span class="text-slate-500 text-xs"># 步驟 2: 起點放入 Queue</span></div>
+                    <div id="code-line-5" class="code-line px-2 py-0.5 rounded border-l-2 border-transparent">visited.add(start)      <span class="text-slate-500 text-xs"># 步驟 3: 標記起點已拜訪</span></div>
+                    <div id="code-line-6" class="code-line px-2 py-0.5 rounded border-l-2 border-transparent"><span class="text-purple-400">while</span> q:                <span class="text-slate-500 text-xs"># 步驟 5: 直到 Queue 為空</span></div>
+                    <div id="code-line-7" class="code-line px-2 py-0.5 rounded border-l-2 border-transparent">    now = q.popleft()   <span class="text-slate-500 text-xs"># 步驟 4: 取出節點</span></div>
+                    <div id="code-line-8" class="code-line px-2 py-0.5 rounded border-l-2 border-transparent">    <span class="text-purple-400">for</span> nxt <span class="text-purple-400">in</span> graph[now]:</div>
+                    <div id="code-line-9" class="code-line px-2 py-0.5 rounded border-l-2 border-transparent">        <span class="text-purple-400">if</span> nxt <span class="text-purple-400">not in</span> visited:</div>
+                    <div id="code-line-10" class="code-line px-2 py-0.5 rounded border-l-2 border-transparent">            visited.add(nxt)</div>
+                    <div id="code-line-11" class="code-line px-2 py-0.5 rounded border-l-2 border-transparent">            q.append(nxt) <span class="text-slate-500 text-xs"># 步驟 5: 鄰居加入 Queue</span></div>
+                </div>
+            </div>
+
+            <!-- BFS 標準五步驟對照表 -->
+            <div class="bg-white rounded-2xl shadow-sm border border-slate-200 p-4 sm:p-5">
+                <h3 class="text-sm font-bold text-slate-800 mb-3 flex items-center gap-2">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 text-indigo-600" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" /></svg>
+                    BFS 標準流程五步驟
+                </h3>
+                <ol class="space-y-2 text-xs sm:text-sm text-slate-600" id="fiveStepsList">
+                    <li id="step-item-1" class="p-2 rounded-xl border border-transparent transition-all flex items-start gap-2.5">
+                        <span class="font-bold text-slate-400 step-num">1.</span>
+                        <span>建立 Queue。</span>
+                    </li>
+                    <li id="step-item-2" class="p-2 rounded-xl border border-transparent transition-all flex items-start gap-2.5">
+                        <span class="font-bold text-slate-400 step-num">2.</span>
+                        <span>將起點放入 Queue。</span>
+                    </li>
+                    <li id="step-item-3" class="p-2 rounded-xl border border-transparent transition-all flex items-start gap-2.5">
+                        <span class="font-bold text-slate-400 step-num">3.</span>
+                        <span>將起點標記為已拜訪。</span>
+                    </li>
+                    <li id="step-item-4" class="p-2 rounded-xl border border-transparent transition-all flex items-start gap-2.5">
+                        <span class="font-bold text-slate-400 step-num">4.</span>
+                        <span>從 Queue 取出一個節點，搜尋它的鄰居。</span>
+                    </li>
+                    <li id="step-item-5" class="p-2 rounded-xl border border-transparent transition-all flex items-start gap-2.5">
+                        <span class="font-bold text-slate-400 step-num">5.</span>
+                        <span>將尚未拜訪的鄰居加入 Queue，直到 Queue 為空。</span>
+                    </li>
+                </ol>
+            </div>
+
+        </div>
+    </main>
+
+    <script>
+        // 定義預設圖形資料結構 (包含節點座標與鄰接表)
+        const GRAPHS = {
+            tree: {
+                name: "樹狀分層圖",
+                nodes: {
+                    'A': { x: 300, y: 50 },
+                    'B': { x: 160, y: 150 },
+                    'C': { x: 440, y: 150 },
+                    'D': { x: 90,  y: 260 },
+                    'E': { x: 230, y: 260 },
+                    'F': { x: 370, y: 260 },
+                    'G': { x: 510, y: 260 }
+                },
+                adj: {
+                    'A': ['B', 'C'],
+                    'B': ['A', 'D', 'E'],
+                    'C': ['A', 'F', 'G'],
+                    'D': ['B'],
+                    'E': ['B'],
+                    'F': ['C'],
+                    'G': ['C']
+                }
+            },
+            mesh: {
+                name: "網狀無向圖",
+                nodes: {
+                    'A': { x: 120, y: 160 },
+                    'B': { x: 250, y: 65 },
+                    'C': { x: 250, y: 255 },
+                    'D': { x: 400, y: 65 },
+                    'E': { x: 400, y: 255 },
+                    'F': { x: 510, y: 160 }
+                },
+                adj: {
+                    'A': ['B', 'C'],
+                    'B': ['A', 'C', 'D'],
+                    'C': ['A', 'B', 'E'],
+                    'D': ['B', 'E', 'F'],
+                    'E': ['C', 'D', 'F'],
+                    'F': ['D', 'E']
+                }
+            },
+            cycle: {
+                name: "帶環複雜圖",
+                nodes: {
+                    '0': { x: 130, y: 80 },
+                    '1': { x: 300, y: 55 },
+                    '2': { x: 470, y: 80 },
+                    '3': { x: 130, y: 240 },
+                    '4': { x: 300, y: 160 },
+                    '5': { x: 470, y: 240 },
+                    '6': { x: 300, y: 275 }
+                },
+                adj: {
+                    '0': ['1', '3', '4'],
+                    '1': ['0', '2', '4'],
+                    '2': ['1', '5'],
+                    '3': ['0', '4', '6'],
+                    '4': ['0', '1', '3', '5'],
+                    '5': ['2', '4', '6'],
+                    '6': ['3', '5']
+                }
+            }
+        };
+
+        // 應用程式狀態變數
+        let currentGraphKey = 'tree';
+        let startNode = 'A';
+        let steps = [];
+        let currentStepIndex = 0;
+        let autoPlayTimer = null;
+
+        // DOM 元素參照
+        const graphSelect = document.getElementById('graphSelect');
+        const startNodeSelect = document.getElementById('startNodeSelect');
+        const edgesGroup = document.getElementById('edgesGroup');
+        const nodesGroup = document.getElementById('nodesGroup');
+        const queueContainer = document.getElementById('queueContainer');
+        const visitedContainer = document.getElementById('visitedContainer');
+        const stepCounter = document.getElementById('stepCounter');
+        const btnPrev = document.getElementById('btnPrev');
+        const btnNext = document.getElementById('btnNext');
+        const btnReset = document.getElementById('btnReset');
+        const btnAuto = document.getElementById('btnAuto');
+        const autoIcon = document.getElementById('autoIcon');
+        const autoText = document.getElementById('autoText');
+
+        // 說明面板 DOM
+        const stepBadge = document.getElementById('stepBadge');
+        const stepTitle = document.getElementById('stepTitle');
+        const stepDesc = document.getElementById('stepDesc');
+
+        // 初始化
+        function init() {
+            populateStartNodes();
+            drawGraphBase();
+            generateBFSSteps();
+            renderStep(0);
+        }
+
+        // 填充起點下拉選單
+        function populateStartNodes() {
+            const nodes = Object.keys(GRAPHS[currentGraphKey].nodes);
+            startNodeSelect.innerHTML = '';
+            nodes.forEach(node => {
+                const option = document.createElement('option');
+                option.value = node;
+                option.textContent = `節點 ${node}`;
+                startNodeSelect.appendChild(option);
+            });
+            startNode = nodes[0];
+        }
+
+        // 繪製基礎 SVG 圖形 (邊與節點)
+        function drawGraphBase() {
+            const graph = GRAPHS[currentGraphKey];
+            edgesGroup.innerHTML = '';
+            nodesGroup.innerHTML = '';
+
+            // 繪製無向邊 (避免重複繪製)
+            const drawnEdges = new Set();
+            for (const [u, neighbors] of Object.entries(graph.adj)) {
+                neighbors.forEach(v => {
+                    const edgeKey = [u, v].sort().join('-');
+                    if (!drawnEdges.has(edgeKey)) {
+                        drawnEdges.add(edgeKey);
+                        const posU = graph.nodes[u];
+                        const posV = graph.nodes[v];
+
+                        const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+                        line.setAttribute('x1', posU.x);
+                        line.setAttribute('y1', posU.y);
+                        line.setAttribute('x2', posV.x);
+                        line.setAttribute('y2', posV.y);
+                        line.setAttribute('id', `edge-${edgeKey}`);
+                        line.setAttribute('stroke', '#cbd5e1');
+                        line.setAttribute('stroke-width', '3');
+                        line.classList.add('edge-transition');
+                        edgesGroup.appendChild(line);
+                    }
+                });
+            }
+
+            // 繪製節點圓圈與文字
+            for (const [id, pos] of Object.entries(graph.nodes)) {
+                const g = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+                g.setAttribute('transform', `translate(${pos.x}, ${pos.y})`);
+                g.setAttribute('id', `node-group-${id}`);
+                g.classList.add('cursor-pointer');
+                
+                // 點擊節點可直接設為起點
+                g.addEventListener('click', () => {
+                    stopAutoPlay();
+                    startNode = id;
+                    startNodeSelect.value = id;
+                    generateBFSSteps();
+                    renderStep(0);
+                });
+
+                const circle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+                circle.setAttribute('r', '24');
+                circle.setAttribute('id', `node-circle-${id}`);
+                circle.setAttribute('fill', '#f1f5f9');
+                circle.setAttribute('stroke', '#94a3b8');
+                circle.setAttribute('stroke-width', '3');
+                circle.classList.add('node-transition');
+
+                const text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+                text.setAttribute('text-anchor', 'middle');
+                text.setAttribute('dy', '0.35em');
+                text.setAttribute('id', `node-text-${id}`);
+                text.setAttribute('fill', '#334155');
+                text.setAttribute('font-weight', '700');
+                text.setAttribute('font-size', '16');
+                text.textContent = id;
+
+                g.appendChild(circle);
+                g.appendChild(text);
+                nodesGroup.appendChild(g);
+            }
+        }
+
+        // 預先模擬並記錄每一步的狀態快照 (Snapshot)
+        function generateBFSSteps() {
+            const adj = GRAPHS[currentGraphKey].adj;
+            steps = [];
+
+            let q = [];
+            let visited = [];
+            let activeEdge = null;
+            let exploringNeighbor = null;
+
+            // 初始狀態 (Step 0)
+            steps.push({
+                q: [...q],
+                visited: [...visited],
+                now: null,
+                nxt: null,
+                activeEdge: null,
+                codeLine: null,
+                fiveStep: null,
+                badge: "初始狀態",
+                title: `準備從起點 [${startNode}] 開始搜尋`,
+                desc: "所有節點皆處於未拜訪狀態。點擊「下一步」開始建立佇列並執行演算法。"
+            });
+
+            // 步驟 1: 建立 Queue 與 Visited
+            steps.push({
+                q: [...q],
+                visited: [...visited],
+                now: null,
+                nxt: null,
+                activeEdge: null,
+                codeLine: 2,
+                fiveStep: 1,
+                badge: "標準步驟 1",
+                title: "建立空的 Queue 與 Visited 集合",
+                desc: "執行 q = deque() 建立先進先出的佇列，並建立 visited = set() 準備記錄已拜訪過的節點。"
+            });
+
+            // 步驟 2: 將起點放入 Queue
+            q.push(startNode);
+            steps.push({
+                q: [...q],
+                visited: [...visited],
+                now: null,
+                nxt: null,
+                activeEdge: null,
+                codeLine: 4,
+                fiveStep: 2,
+                badge: "標準步驟 2",
+                title: `將起點 [${startNode}] 放入 Queue`,
+                desc: `執行 q.append('${startNode}')，起點進入佇列等待處理。`
+            });
+
+            // 步驟 3: 將起點標記為已拜訪
+            visited.push(startNode);
+            steps.push({
+                q: [...q],
+                visited: [...visited],
+                now: null,
+                nxt: null,
+                activeEdge: null,
+                codeLine: 5,
+                fiveStep: 3,
+                badge: "標準步驟 3",
+                title: `將起點 [${startNode}] 標記為已拜訪`,
+                desc: `執行 visited.add('${startNode}')，確保之後不會重複將起點加入佇列。`
+            });
+
+            // 進入 while q 迴圈
+            while (q.length > 0) {
+                // 檢查 while 條件
+                steps.push({
+                    q: [...q],
+                    visited: [...visited],
+                    now: null,
+                    nxt: null,
+                    activeEdge: null,
+                    codeLine: 6,
+                    fiveStep: 5,
+                    badge: "迴圈檢查",
+                    title: "檢查 Queue 是否為空 (while q:)",
+                    desc: `目前 Queue 中還有 ${q.length} 個節點 [${q.join(', ')}]，條件成立，繼續執行搜尋。`
+                });
+
+                // 步驟 4: 取出節點
+                const now = q.shift();
+                steps.push({
+                    q: [...q],
+                    visited: [...visited],
+                    now: now,
+                    nxt: null,
+                    activeEdge: null,
+                    codeLine: 7,
+                    fiveStep: 4,
+                    badge: "標準步驟 4",
+                    title: `從 Queue 前端取出節點 [${now}]`,
+                    desc: `執行 now = q.popleft()，取得當前要擴展搜尋的節點 [${now}]。`
+                });
+
+                // 搜尋鄰居
+                const neighbors = adj[now] || [];
+                for (let i = 0; i < neighbors.length; i++) {
+                    const nxt = neighbors[i];
+                    const edgeKey = [now, nxt].sort().join('-');
+                    const isVisited = visited.includes(nxt);
+
+                    // 檢查鄰居是否已拜訪
+                    steps.push({
+                        q: [...q],
+                        visited: [...visited],
+                        now: now,
+                        nxt: nxt,
+                        activeEdge: edgeKey,
+                        codeLine: 9,
+                        fiveStep: 4,
+                        badge: "檢查鄰居",
+                        title: `檢查 [${now}] 的鄰居 [${nxt}]`,
+                        desc: isVisited 
+                            ? `節點 [${nxt}] 已經在 visited 集合中了，跳過不處理！`
+                            : `節點 [${nxt}] 尚未拜訪 (not in visited)，準備將它加入搜尋行列！`
+                    });
+
+                    // 若未拜訪，標記並加入 Queue
+                    if (!isVisited) {
+                        visited.push(nxt);
+                        q.push(nxt);
+                        steps.push({
+                            q: [...q],
+                            visited: [...visited],
+                            now: now,
+                            nxt: nxt,
+                            activeEdge: edgeKey,
+                            codeLine: 11,
+                            fiveStep: 5,
+                            badge: "標準步驟 5",
+                            title: `標記 [${nxt}] 為已拜訪並加入 Queue`,
+                            desc: `執行 visited.add('${nxt}') 與 q.append('${nxt}')，將 [${nxt}] 排入佇列尾端。`
+                        });
+                    }
+                }
+            }
+
+            // 迴圈結束
+            steps.push({
+                q: [],
+                visited: [...visited],
+                now: null,
+                nxt: null,
+                activeEdge: null,
+                codeLine: 6,
+                fiveStep: 5,
+                badge: "搜尋完成",
+                title: "Queue 已為空，BFS 走訪結束！",
+                desc: `所有與起點 [${startNode}] 相連的節點皆已走訪完畢。最終拜訪順序為：${visited.join(' → ')}。`
+            });
+        }
+
+        // 渲染指定步驟的畫面
+        function renderStep(index) {
+            currentStepIndex = index;
+            const state = steps[index];
+            const graph = GRAPHS[currentGraphKey];
+
+            // 1. 更新計數器與按鈕狀態
+            stepCounter.textContent = `步驟 ${index} / ${steps.length - 1}`;
+            btnPrev.disabled = index === 0;
+            btnNext.disabled = index === steps.length - 1;
+
+            if (index === steps.length - 1) {
+                stopAutoPlay();
+            }
+
+            // 2. 更新說明卡片
+            stepBadge.textContent = state.badge;
+            stepTitle.textContent = state.title;
+            stepDesc.textContent = state.desc;
+
+            // 改變完成時的顏色提示
+            const expBox = document.getElementById('explanationBox');
+            if (index === steps.length - 1) {
+                expBox.className = "bg-emerald-50 border-l-4 border-emerald-600 rounded-r-2xl rounded-l-md p-4 shadow-sm transition-all";
+                stepBadge.className = "px-2 py-0.5 text-xs font-bold bg-emerald-600 text-white rounded-md";
+                stepTitle.className = "text-sm font-bold text-emerald-950";
+                stepDesc.className = "text-sm text-emerald-900/80 leading-relaxed mt-1";
+            } else {
+                expBox.className = "bg-indigo-50 border-l-4 border-indigo-600 rounded-r-2xl rounded-l-md p-4 shadow-sm transition-all";
+                stepBadge.className = "px-2 py-0.5 text-xs font-bold bg-indigo-600 text-white rounded-md";
+                stepTitle.className = "text-sm font-bold text-indigo-950";
+                stepDesc.className = "text-sm text-indigo-900/80 leading-relaxed mt-1";
+            }
+
+            // 3. 高亮對應的 Python 程式碼行
+            for (let i = 1; i <= 11; i++) {
+                const lineEl = document.getElementById(`code-line-${i}`);
+                if (lineEl) {
+                    if (state.codeLine === i || (state.codeLine === 11 && i === 10)) {
+                        lineEl.classList.add('bg-indigo-500/30', 'border-indigo-400', 'text-white', 'font-medium');
+                        lineEl.classList.remove('border-transparent');
+                    } else {
+                        lineEl.classList.remove('bg-indigo-500/30', 'border-indigo-400', 'text-white', 'font-medium');
+                        lineEl.classList.add('border-transparent');
+                    }
+                }
+            }
+
+            // 4. 高亮對應的 BFS 標準五步驟
+            for (let i = 1; i <= 5; i++) {
+                const stepEl = document.getElementById(`step-item-${i}`);
+                const numSpan = stepEl.querySelector('.step-num');
+                if (state.fiveStep === i) {
+                    stepEl.classList.add('bg-indigo-50', 'border-indigo-200', 'text-indigo-950', 'font-semibold');
+                    numSpan.classList.replace('text-slate-400', 'text-indigo-600');
+                } else {
+                    stepEl.classList.remove('bg-indigo-50', 'border-indigo-200', 'text-indigo-950', 'font-semibold');
+                    numSpan.classList.replace('text-indigo-600', 'text-slate-400');
+                }
+            }
+
+            // 5. 更新 SVG 邊的樣式
+            const allEdges = edgesGroup.querySelectorAll('line');
+            allEdges.forEach(line => {
+                line.setAttribute('stroke', '#cbd5e1');
+                line.setAttribute('stroke-width', '3');
+            });
+            if (state.activeEdge) {
+                const activeLine = document.getElementById(`edge-${state.activeEdge}`);
+                if (activeLine) {
+                    activeLine.setAttribute('stroke', '#f59e0b');
+                    activeLine.setAttribute('stroke-width', '5');
+                }
+            }
+
+            // 6. 更新 SVG 節點的樣式
+            Object.keys(graph.nodes).forEach(id => {
+                const circle = document.getElementById(`node-circle-${id}`);
+                const text = document.getElementById(`node-text-${id}`);
+                
+                // 預設：未拜訪
+                let fill = '#f1f5f9';
+                let stroke = '#94a3b8';
+                let textFill = '#334155';
+                let radius = '24';
+
+                if (state.now === id) {
+                    // 當前正在處理的節點 (now)
+                    fill = '#4f46e5';
+                    stroke = '#312e81';
+                    textFill = '#ffffff';
+                    radius = '27';
+                } else if (state.nxt === id) {
+                    // 正在檢查的鄰居節點 (nxt)
+                    fill = '#fef3c7';
+                    stroke = '#d97706';
+                    textFill = '#92400e';
+                    radius = '26';
+                } else if (state.q.includes(id)) {
+                    // 在 Queue 中等待的節點
+                    fill = '#fef3c7';
+                    stroke = '#f59e0b';
+                    textFill = '#b45309';
+                } else if (state.visited.includes(id)) {
+                    // 已拜訪且已從 Queue 處理完畢
+                    fill = '#10b981';
+                    stroke = '#047857';
+                    textFill = '#ffffff';
+                }
+
+                circle.setAttribute('fill', fill);
+                circle.setAttribute('stroke', stroke);
+                circle.setAttribute('r', radius);
+                text.setAttribute('fill', textFill);
+            });
+
+            // 7. 更新 Queue 視覺化容器
+            queueContainer.innerHTML = '';
+            if (state.q.length === 0) {
+                queueContainer.innerHTML = '<span class="text-xs text-slate-400 italic mx-auto">佇列為空 (Empty)</span>';
+            } else {
+                state.q.forEach((item, idx) => {
+                    const badge = document.createElement('div');
+                    badge.className = `px-3 py-1.5 rounded-lg font-bold text-sm shadow-sm border flex items-center gap-1 shrink-0 transition-all ${
+                        idx === 0 
+                        ? 'bg-amber-500 text-white border-amber-600 ring-2 ring-amber-200' 
+                        : 'bg-amber-100 text-amber-900 border-amber-300'
+                    }`;
+                    badge.textContent = item;
+                    queueContainer.appendChild(badge);
+                });
+            }
+
+            // 8. 更新 Visited 視覺化容器
+            visitedContainer.innerHTML = '';
+            if (state.visited.length === 0) {
+                visitedContainer.innerHTML = '<span class="text-xs text-slate-400 italic mx-auto">尚未拜訪任何節點</span>';
+            } else {
+                state.visited.forEach((item, idx) => {
+                    const badge = document.createElement('div');
+                    badge.className = 'px-2.5 py-1 rounded-lg bg-emerald-100 text-emerald-900 border border-emerald-300 font-bold text-xs flex items-center gap-1';
+                    badge.innerHTML = `<span class="text-[10px] text-emerald-600 font-normal">${idx + 1}.</span>${item}`;
+                    visitedContainer.appendChild(badge);
+                });
+            }
+        }
+
+        // 自動播放控制
+        function toggleAutoPlay() {
+            if (autoPlayTimer) {
+                stopAutoPlay();
+            } else {
+                if (currentStepIndex === steps.length - 1) {
+                    renderStep(0);
+                }
+                autoIcon.textContent = '⏸';
+                autoText.textContent = '暫停';
+                btnAuto.classList.replace('text-emerald-700', 'text-amber-700');
+                btnAuto.classList.replace('bg-emerald-50', 'bg-amber-50');
+                btnAuto.classList.replace('border-emerald-200', 'border-amber-200');
+                
+                autoPlayTimer = setInterval(() => {
+                    if (currentStepIndex < steps.length - 1) {
+                        renderStep(currentStepIndex + 1);
+                    } else {
+                        stopAutoPlay();
+                    }
+                }, 1100);
+            }
+        }
+
+        function stopAutoPlay() {
+            if (autoPlayTimer) {
+                clearInterval(autoPlayTimer);
+                autoPlayTimer = null;
+            }
+            autoIcon.textContent = '▶';
+            autoText.textContent = '自動播放';
+            btnAuto.classList.replace('text-amber-700', 'text-emerald-700');
+            btnAuto.classList.replace('bg-amber-50', 'bg-emerald-50');
+            btnAuto.classList.replace('border-amber-200', 'border-emerald-200');
+        }
+
+        // 事件監聽器綁定
+        btnNext.addEventListener('click', () => {
+            stopAutoPlay();
+            if (currentStepIndex < steps.length - 1) {
+                renderStep(currentStepIndex + 1);
+            }
+        });
+
+        btnPrev.addEventListener('click', () => {
+            stopAutoPlay();
+            if (currentStepIndex > 0) {
+                renderStep(currentStepIndex - 1);
+            }
+        });
+
+        btnReset.addEventListener('click', () => {
+            stopAutoPlay();
+            renderStep(0);
+        });
+
+        btnAuto.addEventListener('click', toggleAutoPlay);
+
+        graphSelect.addEventListener('change', (e) => {
+            stopAutoPlay();
+            currentGraphKey = e.target.value;
+            populateStartNodes();
+            drawGraphBase();
+            generateBFSSteps();
+            renderStep(0);
+        });
+
+        startNodeSelect.addEventListener('change', (e) => {
+            stopAutoPlay();
+            startNode = e.target.value;
+            generateBFSSteps();
+            renderStep(0);
+        });
+
+        // 啟動應用
+        window.addEventListener('DOMContentLoaded', init);
+    </script>
+</body>
+</html>
